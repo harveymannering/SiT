@@ -1,6 +1,7 @@
 """
 Rendered-text dataset: OpenWebText documents rendered on the fly (same rendering/augmentation as render_wikitext.ipynb).
 """
+import os
 import random
 import textwrap
 import urllib.request
@@ -12,8 +13,8 @@ import pyarrow.parquet as pq
 import torch
 from PIL import Image, ImageDraw, ImageFont
 
-# Google Fonts (OFL), downloaded once into ./fonts (run prefetch.py on a node with internet)
-FONT_DIR = Path(__file__).parent / "fonts"
+# Google Fonts (OFL), downloaded once into $FONT_DIR (default ./fonts) by prefetch.py on a node with internet
+FONT_DIR = Path(os.environ.get("FONT_DIR", Path(__file__).parent / "fonts"))
 FONT_URL = "https://github.com/google/fonts/raw/main/ofl/"
 FONT_FILES = ["lato/Lato-Regular.ttf", "roboto/Roboto[wdth,wght].ttf", "opensans/OpenSans[wdth,wght].ttf",
               "montserrat/Montserrat[wght].ttf", "oswald/Oswald[wght].ttf", "playfairdisplay/PlayfairDisplay[wght].ttf",
@@ -31,7 +32,7 @@ def get_fonts():
     for f in FONT_FILES:
         p = FONT_DIR / Path(f).name
         if not p.exists():
-            p.parent.mkdir(exist_ok=True)
+            p.parent.mkdir(parents=True, exist_ok=True)
             urllib.request.urlretrieve(FONT_URL + f.replace("[", "%5B").replace("]", "%5D"), p)
         fonts.append(str(p))
     return fonts
