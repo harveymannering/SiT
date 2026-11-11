@@ -1,7 +1,7 @@
 # Shared by the slurm scripts and the login-node prefetch step, so both use the same caches.
 # Usage on the login node:  source cluster_env.sh && python prefetch.py
 export TEXT_SIT_ROOT=/scratch/hgm1g14/text_sit           # generated data (eval references) + results
-export TEXT_SIT_ENV=/scratch/hgm1g14/conda_envs/sit      # conda env (see environment.yml)
+export TEXT_SIT_ENV=gemma                                # conda env (see environment.yml)
 
 # Every download (models + data) goes under cache_dir:
 CACHE_DIR=/scratch/hgm1g14/cache_dir
