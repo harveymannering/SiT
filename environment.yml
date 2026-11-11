@@ -14,3 +14,12 @@ dependencies:
     - accelerate
     - torchdiffeq
     - wandb
+    # text-rendering scaling experiment
+    - pyarrow
+    - huggingface_hub
+    - transformers>=4.51
+    - python-doctr
+    - torchmetrics
+    - torch-fidelity
+    - scipy
+    - rapidfuzz

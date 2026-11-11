@@ -360,10 +360,18 @@ def SiT_S_4(**kwargs):
 def SiT_S_8(**kwargs):
     return SiT(depth=12, hidden_size=384, patch_size=8, num_heads=6, **kwargs)
 
+# Intermediate sizes for the text-rendering scaling study (S -> M -> B -> BL -> L is roughly x2 params per step)
+def SiT_M_8(**kwargs):
+    return SiT(depth=12, hidden_size=512, patch_size=8, num_heads=8, **kwargs)
+
+def SiT_BL_8(**kwargs):
+    return SiT(depth=18, hidden_size=896, patch_size=8, num_heads=14, **kwargs)
+
 
 SiT_models = {
     'SiT-XL/2': SiT_XL_2,  'SiT-XL/4': SiT_XL_4,  'SiT-XL/8': SiT_XL_8,
     'SiT-L/2':  SiT_L_2,   'SiT-L/4':  SiT_L_4,   'SiT-L/8':  SiT_L_8,
     'SiT-B/2':  SiT_B_2,   'SiT-B/4':  SiT_B_4,   'SiT-B/8':  SiT_B_8,
     'SiT-S/2':  SiT_S_2,   'SiT-S/4':  SiT_S_4,   'SiT-S/8':  SiT_S_8,
+    'SiT-M/8':  SiT_M_8,   'SiT-BL/8': SiT_BL_8,
 }
