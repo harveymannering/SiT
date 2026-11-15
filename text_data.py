@@ -41,7 +41,7 @@ def get_fonts():
 FONTS = get_fonts()
 
 
-def render(text, size=512, font_size=40, pad=8, font=None):
+def render(text, size=256, font_size=35, pad=8, font=None):
     """Returns (image, number of words drawn). Lines that don't fit at the bottom are dropped."""
     text = text.strip()
     font = ImageFont.truetype(font or random.choice(FONTS), font_size)

@@ -2,7 +2,7 @@
 Prepares the (small, fixed) evaluation data in --data-dir. Training pages are rendered on the fly (text_data.py).
 
   vocab.txt                  words seen >= 3 times in one OpenWebText training shard (for the valid-word metric)
-  validation_latents.f16     raw float16 VAE latents of the validation pages, shape (N, 4, 64, 64), unscaled
+  validation_latents.f16     raw float16 VAE latents of the validation pages, shape (N, 4, 32, 32), unscaled
   validation_texts.jsonl     the text drawn on each validation page
   fid_ref.pt                 Inception statistics of the real validation pages
   reference.json             metrics on real and VAE-reconstructed validation pages (sanity check / ceiling)

@@ -429,7 +429,7 @@ if __name__ == "__main__":
     parser.add_argument("--sample-batch-size", type=int, default=256)
     parser.add_argument("--decode-chunk", type=int, default=16, help="VAE decode batch size (memory)")
     parser.add_argument("--encode-chunk", type=int, default=32, help="VAE encode batch size (memory)")
-    parser.add_argument("--font-size", type=int, default=40)
+    parser.add_argument("--font-size", type=int, default=35)
     parser.add_argument("--sampling-method", type=str, default="euler")
     parser.add_argument("--num-sampling-steps", type=int, default=50)
     parser.add_argument("--ppl-model", type=str, default="Qwen/Qwen3-1.7B-Base")

@@ -8,12 +8,13 @@
 #SBATCH --time=60:00:00
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=16
-#SBATCH --array=0-4
+#SBATCH --array=0-11
 
-# Model-size sweep: one array task per model (~32M -> 453M params, roughly x2 per step).
+# Model-size sweep over patch sizes 8 and 4: one array task per model (~32M -> ~675M params, roughly x2 per step).
 # OpenWebText pages are rendered (CPU workers) and VAE-encoded on the fly, so every training page is unique.
 # Needs text_sit_prepare.slurm to have finished. Re-submitting resumes each model from its latest checkpoint.
-MODELS=(SiT-S/8 SiT-M/8 SiT-B/8 SiT-BL/8 SiT-L/8)
+MODELS=(SiT-S/8 SiT-M/8 SiT-B/8 SiT-BL/8 SiT-L/8 SiT-XL/8
+        SiT-S/4 SiT-M/4 SiT-B/4 SiT-BL/4 SiT-L/4 SiT-XL/4)
 MODEL=${MODELS[$SLURM_ARRAY_TASK_ID]}
 
 echo Script starting: $MODEL
@@ -39,11 +40,11 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # Metrics go to $TEXT_SIT_ROOT/results/<model>/metrics.jsonl (train/val loss, FID, OCR perplexity, FLOPs),
 # with sample grids + OCR text in .../samples/.
 torchrun --standalone --nproc_per_node=1 train.py \
-    --data-path $TEXT_SIT_ROOT/data \
-    --results-dir $TEXT_SIT_ROOT/results \
+    --data-path $TEXT_SIT_ROOT/data_256 \
+    --results-dir $TEXT_SIT_ROOT/results_256 \
     --exp-name ${MODEL//\//-} \
     --model $MODEL \
-    --image-size 512 \
+    --image-size 256 \
     --vae mse \
     --global-batch-size 256 \
     --max-steps 200000 \

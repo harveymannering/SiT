@@ -32,6 +32,6 @@ export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-python prepare_eval_data.py --data-dir $TEXT_SIT_ROOT/data --workers 15 || exit 1
+python prepare_eval_data.py --data-dir $TEXT_SIT_ROOT/data_256 --workers 15 || exit 1
 
 echo Script completed =3
