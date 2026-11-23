@@ -1,6 +1,6 @@
 #!/bin/bash -l
 #SBATCH --account=ecs
-#SBATCH --partition=dual_h200,quad_h200
+#SBATCH --partition=l40,a100,swarm_a100,swarm_h100
 #SBATCH --job-name=text_sit_train
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
@@ -8,13 +8,12 @@
 #SBATCH --time=60:00:00
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=16
-#SBATCH --array=0-11
+#SBATCH --array=0-6
 
 # Model-size sweep over patch sizes 8 and 4: one array task per model (~32M -> ~675M params, roughly x2 per step).
 # OpenWebText pages are rendered (CPU workers) and VAE-encoded on the fly, so every training page is unique.
 # Needs text_sit_prepare.slurm to have finished. Re-submitting resumes each model from its latest checkpoint.
-MODELS=(SiT-S/8 SiT-M/8 SiT-B/8 SiT-BL/8 SiT-L/8 SiT-XL/8
-        SiT-S/4 SiT-M/4 SiT-B/4 SiT-BL/4 SiT-L/4 SiT-XL/4)
+MODELS=(SiT-S/8 SiT-M/8 SiT-B/8 SiT-BL/8 SiT-L/8 SiT-XL/8 SiT-XL/4)
 MODEL=${MODELS[$SLURM_ARRAY_TASK_ID]}
 
 echo Script starting: $MODEL
@@ -31,7 +30,7 @@ activate_or_die() {
 
 # Compute nodes are offline: run `source cluster_env.sh && python prefetch.py` on the login node first.
 source cluster_env.sh
-activate_or_die $TEXT_SIT_ENV
+conda activate $TEXT_SIT_ENV
 export HF_HUB_OFFLINE=1
 export HF_DATASETS_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1

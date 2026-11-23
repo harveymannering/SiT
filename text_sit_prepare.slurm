@@ -1,6 +1,6 @@
 #!/bin/bash -l
 #SBATCH --account=ecs
-#SBATCH --partition=dual_h200,quad_h200
+#SBATCH --partition=a100,swarm_a100
 #SBATCH --job-name=text_sit_prepare
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
@@ -27,7 +27,7 @@ activate_or_die() {
 
 # Compute nodes are offline: run `source cluster_env.sh && python prefetch.py` on the login node first.
 source cluster_env.sh
-activate_or_die $TEXT_SIT_ENV
+conda activate $TEXT_SIT_ENV
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
