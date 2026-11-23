@@ -10,7 +10,6 @@ torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.data import DataLoader
 from torch.utils.flop_counter import FlopCounterMode
 from torchvision.utils import save_image
 import numpy as np
@@ -29,8 +28,7 @@ from models import SiT_models
 from transport import create_transport, Sampler
 from diffusers.models import AutoencoderKL
 from train_utils import parse_transport_args
-from text_data import RenderedOpenWebText, owt_files
-from text_eval import TextQuality, create_fid, decode, encode, to_uint8
+from text_eval import TextQuality, create_fid, decode, to_uint8
 import wandb_utils
 
 
@@ -132,6 +130,36 @@ def evaluate(ema, vae, transport_sampler, zs, fid, text_quality, args):
     metrics, texts = text_quality(images[:args.num_ocr_samples])
     metrics["fid"] = fid.compute().item()
     return metrics, images, texts
+
+
+def load_train_latents(data_path, latent_size, rank, world_size):
+    """This rank's contiguous share of train_latents.f16 (prepare_train_latents.py), read fully into RAM."""
+    meta = json.load(open(f"{data_path}/train_latents.json"))
+    assert meta["shape"] == [4, latent_size, latent_size], f"latents have shape {meta['shape']}, wrong --image-size?"
+    for task in range(meta["num_tasks"]):
+        progress_path = f"{data_path}/train_latents_progress/{task:03d}.json"
+        assert os.path.exists(progress_path) and json.load(open(progress_path)).get("done"), \
+            f"prepare_train_latents.py task {task} has not finished ({progress_path})"
+    n = meta["num_pages"]
+    lo, hi = rank * n // world_size, (rank + 1) * n // world_size
+    page = 4 * latent_size * latent_size
+    latents = np.fromfile(f"{data_path}/train_latents.f16", dtype=np.float16, count=(hi - lo) * page,
+                          offset=lo * page * 2)
+    return latents.reshape(-1, 4, latent_size, latent_size), meta
+
+
+def train_batches(latents, batch_size, seed, steps_done=0):
+    """Endless stream of (unscaled float16) latent batches: a new random permutation of the pages every epoch, seeded
+    by (seed, epoch), so resuming from steps_done continues exactly where the run stopped (incomplete last batch of an
+    epoch is dropped)."""
+    steps_per_epoch = len(latents) // batch_size
+    epoch, step = divmod(steps_done, steps_per_epoch)
+    while True:
+        perm = np.random.default_rng([seed, epoch]).permutation(len(latents))
+        for i in range(step, steps_per_epoch):
+            idx = np.sort(perm[i * batch_size:(i + 1) * batch_size])  # sorted: faster gather, order is irrelevant
+            yield torch.from_numpy(latents[idx])
+        epoch, step = epoch + 1, 0
 
 
 def center_crop_arr(pil_image, image_size):
@@ -253,28 +281,17 @@ def main(args):
         train_steps = state_dict.get("train_steps", 0)
         logger.info(f"Resumed from {args.ckpt} at step {train_steps}")
 
-    # Setup data: OpenWebText pages rendered on the fly (text_data.py); validation latents from prepare_eval_data.py
-    dataset = RenderedOpenWebText(
-        owt_files(),
-        rank=rank,
-        world_size=dist.get_world_size(),
-        seed=args.global_seed,
-        pages_seen=train_steps * local_batch_size,  # resume without repeating pages
-        size=args.image_size,
-        font_size=args.font_size
-    )
-    loader = DataLoader(
-        dataset,
-        batch_size=local_batch_size,
-        num_workers=args.num_workers,
-        pin_memory=True,
-        prefetch_factor=4,
-        persistent_workers=True
-    )
+    # Setup data: pre-computed latents of rendered OpenWebText pages (prepare_train_latents.py), split between ranks,
+    # and validation latents (prepare_eval_data.py):
+    load_start = time()
+    train_latents, latent_meta = load_train_latents(args.data_path, latent_size, rank, dist.get_world_size())
+    logger.info(f"Loaded {len(train_latents):,} training latents ({train_latents.nbytes / 1e9:.1f} GB) on this rank in "
+                f"{time() - load_start:.0f}s; {args.max_steps:,} steps = "
+                f"{args.max_steps * args.global_batch_size / latent_meta['num_pages']:.2f} epochs")
+    batches = train_batches(train_latents, local_batch_size, seed, steps_done=train_steps)
     val_latents = np.fromfile(f"{args.data_path}/validation_latents.f16", dtype=np.float16)
     val_latents = torch.from_numpy(val_latents.reshape(-1, 4, latent_size, latent_size)[:args.num_val]).to(device)
-    logger.info(f"Training on {len(dataset.units):,} OpenWebText row groups (1000 documents each), "
-                f"validating on {len(val_latents):,} held-out pages")
+    logger.info(f"Validating on {len(val_latents):,} held-out pages")
 
     # Prepare models for training:
     if train_steps == 0:
@@ -320,12 +337,9 @@ def main(args):
 
     logger.info(f"Training for {args.max_steps} steps...")
     while train_steps < args.max_steps:
-        for x, y in loader:  # endless stream
-            x = x.to(device, non_blocking=True).float().div_(127.5).sub_(1)  # uint8 -> [-1, 1]
-            y = y.to(device, non_blocking=True)
-            with torch.no_grad():
-                # Map input images to latent space + normalize latents:
-                x = encode(vae, x, args.encode_chunk).mul_(0.18215)
+        for x in batches:  # endless stream
+            x = x.to(device).float().mul_(0.18215)  # normalize latents
+            y = torch.zeros(len(x), dtype=torch.long, device=device)  # unconditional
             model_kwargs = dict(y=y)
             with torch.autocast("cuda", dtype=torch.bfloat16, enabled=args.bf16):
                 loss_dict = transport.training_losses(model, x, model_kwargs)
@@ -409,7 +423,6 @@ if __name__ == "__main__":
     parser.add_argument("--global-batch-size", type=int, default=256)
     parser.add_argument("--global-seed", type=int, default=0)
     parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="ema")  # Choice doesn't affect training
-    parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--log-every", type=int, default=100)
     parser.add_argument("--ckpt-every", type=int, default=50_000)
     parser.add_argument("--wandb", action="store_true")
@@ -428,8 +441,6 @@ if __name__ == "__main__":
     parser.add_argument("--num-saved-samples", type=int, default=16)
     parser.add_argument("--sample-batch-size", type=int, default=256)
     parser.add_argument("--decode-chunk", type=int, default=16, help="VAE decode batch size (memory)")
-    parser.add_argument("--encode-chunk", type=int, default=32, help="VAE encode batch size (memory)")
-    parser.add_argument("--font-size", type=int, default=35)
     parser.add_argument("--sampling-method", type=str, default="euler")
     parser.add_argument("--num-sampling-steps", type=int, default=50)
     parser.add_argument("--ppl-model", type=str, default="Qwen/Qwen3-1.7B-Base")

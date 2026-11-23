@@ -1,5 +1,5 @@
 """
-Prepares the (small, fixed) evaluation data in --data-dir. Training pages are rendered on the fly (text_data.py).
+Prepares the (small, fixed) evaluation data in --data-dir. Training latents: prepare_train_latents.py.
 
   vocab.txt                  words seen >= 3 times in one OpenWebText training shard (for the valid-word metric)
   validation_latents.f16     raw float16 VAE latents of the validation pages, shape (N, 4, 32, 32), unscaled
@@ -11,6 +11,7 @@ Validation pages come from the first documents of the held-out OpenWebText shard
 rendered with the same per-document seed as training uses, so the output is identical on every run.
 """
 import argparse
+import functools
 import json
 import os
 import random
@@ -26,16 +27,17 @@ from text_data import VAL_SHARD, owt_documents, owt_files, render_document
 from text_eval import TextQuality, create_fid, decode, encode, save_fid_ref, to_uint8
 
 
-def render_pages(job):
+def render_pages(job, **render_kwargs):
     doc_id, text = job
     random.seed(f"{doc_id}-0")
-    return [(np.array(img), page_text) for img, page_text in render_document(text)]  # numpy: cheap to pickle
+    return [(np.array(img), page_text) for img, page_text in render_document(text, **render_kwargs)]  # numpy: cheap to pickle
 
 
 def validation_pages(args):
     n = 0
     with Pool(args.workers) as pool:
-        for result in pool.imap(render_pages, owt_documents(owt_files()[VAL_SHARD]), chunksize=4):  # keeps order
+        render = functools.partial(render_pages, size=args.image_size, font_size=args.font_size)
+        for result in pool.imap(render, owt_documents(owt_files()[VAL_SHARD]), chunksize=4):  # keeps order
             for page in result:
                 if n >= args.num_val:
                     return
@@ -100,6 +102,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-dir", type=str, required=True)
     parser.add_argument("--vae", type=str, choices=["ema", "mse"], default="mse")
+    parser.add_argument("--image-size", type=int, default=256)  # must match prepare_train_latents.py
+    parser.add_argument("--font-size", type=int, default=35)
     parser.add_argument("--ppl-model", type=str, default="Qwen/Qwen3-1.7B-Base")
     parser.add_argument("--num-val", type=int, default=10_000, help="validation pages (val loss + FID statistics)")
     parser.add_argument("--num-ref", type=int, default=2048, help="validation pages used for the reference metrics")

@@ -10,8 +10,9 @@
 #SBATCH --cpus-per-task=16
 
 # Renders the held-out OpenWebText validation pages and computes the evaluation references (~10k pages, small).
-# Training pages are rendered on the fly. Submit both jobs with:
-#   jid=$(sbatch --parsable text_sit_prepare.slurm) && sbatch --dependency=afterok:$jid text_sit_train.slurm
+# Training latents come from text_sit_latents.slurm (can run at the same time). Submit all three jobs with:
+#   a=$(sbatch --parsable text_sit_prepare.slurm) && b=$(sbatch --parsable text_sit_latents.slurm) && \
+#     sbatch --dependency=afterok:$a:$b text_sit_train.slurm
 
 echo Script starting
 nvidia-smi
@@ -32,6 +33,6 @@ export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-python prepare_eval_data.py --data-dir $TEXT_SIT_ROOT/data_256 --workers 15 || exit 1
+python prepare_eval_data.py --data-dir $TEXT_SIT_ROOT/data_256 --image-size 256 --font-size 35 --workers 15 || exit 1
 
 echo Script completed =3

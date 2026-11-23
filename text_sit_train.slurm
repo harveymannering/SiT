@@ -4,15 +4,15 @@
 #SBATCH --job-name=text_sit_train
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
-#SBATCH --mem=200G
+#SBATCH --mem=256G                 # 200 GB of training latents are held in RAM
 #SBATCH --time=60:00:00
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=8
 #SBATCH --array=0-6
 
 # Model-size sweep over patch sizes 8 and 4: one array task per model (~32M -> ~675M params, roughly x2 per step).
-# OpenWebText pages are rendered (CPU workers) and VAE-encoded on the fly, so every training page is unique.
-# Needs text_sit_prepare.slurm to have finished. Re-submitting resumes each model from its latest checkpoint.
+# Trains on the 200 GB of pre-computed latents (~24M OpenWebText pages) from text_sit_latents.slurm.
+# Needs text_sit_prepare.slurm and text_sit_latents.slurm to have finished. Re-submitting resumes each model from its latest checkpoint.
 MODELS=(SiT-S/8 SiT-M/8 SiT-B/8 SiT-BL/8 SiT-L/8 SiT-XL/8 SiT-XL/4)
 MODEL=${MODELS[$SLURM_ARRAY_TASK_ID]}
 
@@ -47,7 +47,6 @@ torchrun --standalone --nproc_per_node=1 train.py \
     --vae mse \
     --global-batch-size 256 \
     --max-steps 200000 \
-    --num-workers 15 \
     --ckpt-every 50000 \
     --eval-every 20000 || exit 1
 
